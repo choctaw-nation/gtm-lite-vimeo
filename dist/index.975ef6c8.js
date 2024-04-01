@@ -587,48 +587,49 @@ function hmrAccept(bundle /*: ParcelRequire */ , id /*: string */ ) {
 var _classLiteVimeoGtmTracker = require("./class-lite-vimeo-gtm-tracker");
 (function() {
     "use strict";
-    new (0, _classLiteVimeoGtmTracker.LiteVimeoGTMTracker)(document, window, {
-        events: {
-            play: true,
-            pause: false,
-            complete: true
-        },
-        percentages: {
-            every: 25,
-            each: [
-                0,
-                90
-            ]
-        }
-    });
+    new (0, _classLiteVimeoGtmTracker.LiteVimeoGTMTracker)();
 })();
 
 },{"./class-lite-vimeo-gtm-tracker":"6j84x"}],"6j84x":[function(require,module,exports) {
 var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
 parcelHelpers.defineInteropFlag(exports);
 parcelHelpers.export(exports, "LiteVimeoGTMTracker", ()=>LiteVimeoGTMTracker);
-var _utilities = require("./utilities");
 var _fakeGTM = require("./utilities/fakeGTM");
 var _fakeGTMDefault = parcelHelpers.interopDefault(_fakeGTM);
 (0, _fakeGTMDefault.default)();
 class LiteVimeoGTMTracker {
-    constructor(document, window1, config){
-        this.document = document;
-        this.window = window1;
-        this.config = config;
-        this.cleanConfig();
-        this.handle = !config.syntax ? this.getHandler() : this.getHandler(config.syntax);
+    constructor(config){
+        this.config = {
+            events: {
+                play: true,
+                pause: false,
+                complete: true
+            },
+            percentages: {
+                every: 25,
+                each: [
+                    0,
+                    90
+                ]
+            }
+        };
         // The API won't work on LT IE9, so we bail if we detect those User Agents
         if (navigator.userAgent.match(/MSIE [678]\./gi)) return;
         const liteVimeoEls = document.querySelectorAll("lite-vimeo");
         if (!liteVimeoEls || 0 === liteVimeoEls.length) return;
+        this.dataLayer = window.dataLayer;
+        this.config = {
+            ...this.config,
+            ...config
+        };
+        this.cleanConfig();
         liteVimeoEls.forEach((el)=>{
             el.addEventListener("click", ()=>{
-                window1.dataLayer.push({
+                window.dataLayer.push({
                     event: "lite-vimeo-click"
                 });
                 this.loadVimeoAPI(()=>{
-                    this.listenTo(el.shadowRoot.querySelector("iframe"));
+                    this.addVimeoListeners(el.shadowRoot.querySelector("iframe"));
                 });
             });
         });
@@ -636,277 +637,131 @@ class LiteVimeoGTMTracker {
     /**
 	 * Sets up the config object
 	 */ cleanConfig() {
-        [
-            Object.keys(this.config.percentages)
-        ].forEach((setting)=>{
-            let values = this.config.percentages[`${setting}`];
+        this.setPercentageValuesToArrays();
+        this.calcPercentages();
+    }
+    /**
+	 * Extends the config object to include _track, which holds a dictionary of percentages and values to track
+	 */ calcPercentages() {
+        let points = this.config.percentages.every;
+        let percentagePoints = [];
+        points.forEach((val)=>{
+            const n = 100 / val; // val = 25, n = 4
+            let i = 1;
+            while(i < n){
+                const point = val * i;
+                i++;
+                if (point > 0.0 && point < 100.0) percentagePoints.push(point);
+            }
+        });
+        percentagePoints = [
+            ...this.config.percentages.each,
+            ...percentagePoints
+        ];
+        this.config._track = {
+            percentages: percentagePoints.reduce((prev, curr)=>{
+                prev[curr + "%"] = curr / 100.0;
+                return prev;
+            }, {})
+        };
+    }
+    /**
+	 * Set every value in the percentages object to an array
+	 */ setPercentageValuesToArrays() {
+        const settings = [
+            ...Object.keys(this.config.percentages)
+        ];
+        settings.forEach((setting)=>{
+            let values = this.config.percentages[setting];
             if (!Array.isArray(values)) values = [
                 values
             ];
-            if (values) this.config.percentages[`${setting}`] = values.map(Number);
+            if (values) this.config.percentages[setting] = values.map(Number);
         });
-        let percentagePoints = [
-            ...this.config.percentages.each
-        ];
-        if (this.config.percentages.every) [
-            this.config.percentages.every
-        ].forEach(function(val) {
-            var n = 100 / val;
-            let every = [];
-            for(let i = 1; i < n; i++)every.push(val * i);
-            percentagePoints = percentagePoints.concat(every.filter((val)=>val > 0.0 && val < 100.0));
-        });
-        const percentages = percentagePoints.reduce(function(prev, curr) {
-            prev[curr + "%"] = curr / 100.0;
-            return prev;
-        }, {});
-        this.config._track = {
-            percentages: percentages
-        };
     }
     /**
 	 * If the Vimeo API isn't loaded, load it, then call the callback.
 	 * @param {Function} callback
 	 */ loadVimeoAPI(callback) {
-        if (!window.Vimeo) (0, _utilities.loadScript)("https://player.vimeo.com/api/player.js", callback);
+        if (!window.Vimeo) this.loadScript(callback);
         else callback();
     }
     /**
-	 * Wire up the Event listener
+	 * Wire up the Event listeners for the Vimeo player
 	 * @param {HTMLIFrameElement} el
-	 * @returns
-	 */ async listenTo(el) {
-        console.log("listening...");
-        if (el.__vimeoTracked) return;
-        el.__vimeoTracked = true;
+	 */ async addVimeoListeners(el) {
         const video = new Vimeo.Player(el);
-        const { _track: { percentages } } = this.config;
-        const eventNameDict = {
+        const vimeoVideoEvents = {
             play: "play",
             pause: "pause",
             complete: "ended"
         };
-        const cache = {};
+        // const cache = {};
         const title = await video.getVideoTitle();
         [
             "play",
             "pause",
             "complete"
         ].forEach((key)=>{
-            if (this.config.events[`${key}`]) {
-                console.log(eventNameDict[`${key}`]);
-                video.on(eventNameDict[`${key}`], ()=>{
-                    this.handle(key, title);
-                    console.log(window.dataLayer);
-                });
-            }
+            if (this.config.events[`${key}`]) video.on(vimeoVideoEvents[`${key}`], ()=>{
+                this.updateDataLayer(key, title);
+            });
         });
-        if (percentages) video.on("timeupdate", function(evt) {
-            var percentage = evt.percent;
+        const percentages = this.config._track?.percentages;
+        if (percentages) video.on("timeupdate", ({ percent })=>{
             var key;
-            for(key in percentages)if (percentage >= percentages[key] && !cache[key]) {
-                cache[key] = true;
-                this.handle(key, title);
-            }
+            for(key in percentages)if (percent >= percentages[key] && !cache[key]) // cache[key] = true;
+            this.updateDataLayer(key, title);
         });
     }
-    getHandler(syntax = {}) {
-        var gtmGlobal = syntax.name || "dataLayer";
-        var uaGlobal = syntax.name || window.GoogleAnalyticsObject || "ga";
-        var clGlobal = "_gaq";
-        var dataLayer;
-        var handlers = {
-            gtm: function(state, title) {
-                if (state.indexOf("%") === -1 && state.indexOf("play") === -1) dataLayer.push({
-                    event: "video",
-                    video_provider: "vimeo",
-                    video_action: state,
-                    video_title: title.toLowerCase(),
-                    video_percent: undefined
-                });
-                else if (state === "0%") dataLayer.push({
-                    event: "video",
-                    video_provider: "vimeo",
-                    video_action: "start",
-                    video_title: title.toLowerCase(),
-                    video_percent: undefined
-                });
-                else if (state.indexOf("play") === -1) dataLayer.push({
-                    event: "video",
-                    video_provider: "vimeo",
-                    video_action: "progress",
-                    video_percent: state,
-                    video_title: title.toLowerCase()
-                });
-            },
-            cl: function(state, title) {
-                window[clGlobal].push([
-                    "_trackEvent",
-                    "Videos",
-                    state,
-                    title
-                ]);
-            },
-            ua: function(state, title) {
-                window[uaGlobal]("send", "event", "Videos", state, title);
-            }
-        };
-        switch(syntax.type){
-            case "gtm":
-                dataLayer = window[gtmGlobal] = window[gtmGlobal] || [];
-                break;
-            case "ua":
-                window[uaGlobal] = window[uaGlobal] || function() {
-                    (window[uaGlobal].q = window[uaGlobal].q || []).push(arguments);
-                };
-                window[uaGlobal].l = +new Date();
-                break;
-            case "cl":
-                window[clGlobal] = window[clGlobal] || [];
-                break;
-            default:
-                if (!window[gtmGlobal]) {
-                    syntax.type = "gtm";
-                    dataLayer = window[gtmGlobal] = window[gtmGlobal] || [];
-                } else if (uaGlobal && !window[uaGlobal]) syntax.type = "ua";
-                else if (!window[clGlobal] && !window[clGlobal].push) syntax.type = "cl";
-                break;
-        }
-        return handlers[syntax.type];
+    /**
+	 * Updates the GTM dataLayer with the video event
+	 * @param action
+	 * @param videoTitle
+	 */ updateDataLayer(action, videoTitle) {
+        if (action.indexOf("%") === -1 && action.indexOf("play") === -1) this.dataLayer.push({
+            event: "video",
+            video_provider: "vimeo",
+            video_action: action,
+            video_title: videoTitle.toLowerCase(),
+            video_percent: undefined
+        });
+        else if (action === "0%") this.dataLayer.push({
+            event: "video",
+            video_provider: "vimeo",
+            video_action: "start",
+            video_title: videoTitle.toLowerCase(),
+            video_percent: undefined
+        });
+        else if (action.indexOf("play") === -1) this.dataLayer.push({
+            event: "video",
+            video_provider: "vimeo",
+            video_action: "progress",
+            video_percent: action,
+            video_title: videoTitle.toLowerCase()
+        });
     }
-}
-
-},{"./utilities":"3xPnH","@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./utilities/fakeGTM":"gMc37"}],"3xPnH":[function(require,module,exports) {
-/**
- * Extends an object with the properties of one or more other objects.
- * @returns {string} A unique identifier
- */ var parcelHelpers = require("@parcel/transformer-js/src/esmodule-helpers.js");
-parcelHelpers.defineInteropFlag(exports);
-parcelHelpers.export(exports, "extend_", ()=>extend_);
-/**
- * Returns true if the object is an array.
- * @param {any} o any thing
- * @returns boolean
- */ parcelHelpers.export(exports, "isArray_", ()=>isArray_);
-/**
- * Iterates over an array and calls a function for each element.
- * @param {Array} arr
- * @param {Function} fn
- * @returns void
- */ parcelHelpers.export(exports, "forEach_", ()=>forEach_);
-/**
- * Maps an array to another array by calling a function for each element.
- * @param {Array} arr
- * @param {Function} fn
- * @returns {Array}
- */ parcelHelpers.export(exports, "map_", ()=>map_);
-/**
- * Filters an array by calling a function for each element.
- * @param {Array} arr
- * @param {Function} fn
- * @returns {Array}
- */ parcelHelpers.export(exports, "filter_", ()=>filter_);
-/**
- * Reduces an array to a single value by calling a function for each element.
- * @param {Array} arr
- * @param {Function} fn
- * @param {any} init
- * @returns {any}
- */ parcelHelpers.export(exports, "reduce_", ()=>reduce_);
-/**
- * Returns true if the thing is undefined.
- * @param {any} thing
- * @returns boolean
- */ parcelHelpers.export(exports, "isUndefined_", ()=>isUndefined_);
-/**
- * Selects All tags and returns an array
- * @param {string} tags Any thing
- * @returns {Array}
- */ parcelHelpers.export(exports, "selectAllTags_", ()=>selectAllTags_);
-/**
- * Checks if an el's src is a Vimeo URL
- * @param {HTMLElement} el an HTML Element
- * @returns boolean
- */ parcelHelpers.export(exports, "isVimeo", ()=>isVimeo);
-parcelHelpers.export(exports, "loadScript", ()=>loadScript);
-function extend_() {
-    var args = [].slice.call(arguments);
-    var dst = args.shift();
-    var src;
-    var key;
-    var i;
-    for(i = 0; i < args.length; i++){
-        src = args[i];
-        for(key in src)dst[key] = src[key];
-    }
-    return dst;
-}
-function isArray_(o) {
-    if (Array.isArray_) return Array.isArray_(o);
-    return Object.prototype.toString.call(o) === "[object Array]";
-}
-function forEach_(arr, fn) {
-    if (Array.prototype.forEach_) return arr.forEach.call(arr, fn);
-    var i;
-    for(i = 0; i < arr.length; i++)fn.call(window, arr[i], i, arr);
-}
-function map_(arr, fn) {
-    if (Array.prototype.map_) return arr.map.call(arr, fn);
-    var newArr = [];
-    forEach_(arr, function(el, ind, arr) {
-        newArr.push(fn.call(window, el, ind, arr));
-    });
-    return newArr;
-}
-function filter_(arr, fn) {
-    if (Array.prototype.filter) return arr.filter.call(arr, fn);
-    var newArr = [];
-    forEach_(arr, function(el, ind, arr) {
-        if (fn.call(window, el, ind, arr)) newArr.push(el);
-    });
-    return newArr;
-}
-function reduce_(arr, fn, init) {
-    if (Array.prototype.reduce) return arr.reduce.call(arr, fn, init);
-    var result = init;
-    var el;
-    var i;
-    for(i = 0; i < arr.length; i++){
-        el = arr[i];
-        result = fn.call(window, result, el, arr, i);
-    }
-    return result;
-}
-function isUndefined_(thing) {
-    return typeof thing === "undefined";
-}
-function selectAllTags_(tags) {
-    if (!isArray_(tags)) tags = [
-        tags
-    ];
-    return [].slice.call(document.querySelectorAll(tags.join()));
-}
-function isVimeo(el) {
-    console.log("checking src of " + el);
-    return el.src.indexOf("player.vimeo.com/video/") > -1;
-}
-function loadScript(src, callback) {
-    var f, s;
-    f = document.getElementsByTagName("script")[0];
-    s = document.createElement("script");
-    s.onload = callCallback;
-    s.src = src;
-    s.async = true;
-    f.parentNode.insertBefore(s, f);
-    function callCallback() {
-        if (callback) {
+    /**
+	 * Loads the Vimeo API script before the first script
+	 * @param callback {Function} A callback function
+	 */ loadScript(callback) {
+        const src = "https://player.vimeo.com/api/player.js";
+        const vimeoPlayerScript = document.createElement("script");
+        vimeoPlayerScript.onload = ()=>{
             callback();
-            s.onload = null;
-        }
+            vimeoPlayerScript.onload = null;
+        };
+        vimeoPlayerScript.src = src;
+        vimeoPlayerScript.async = true;
+        const scripts = document.getElementsByTagName("script");
+        if (scripts.length > 0) {
+            const script = scripts[0];
+            if (script && script.parentNode) script.parentNode.insertBefore(vimeoPlayerScript, script);
+        } else document.head.appendChild(vimeoPlayerScript);
     }
 }
 
-},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3"}],"gkKU3":[function(require,module,exports) {
+},{"@parcel/transformer-js/src/esmodule-helpers.js":"gkKU3","./utilities/fakeGTM":"gMc37"}],"gkKU3":[function(require,module,exports) {
 exports.interopDefault = function(a) {
     return a && a.__esModule ? a : {
         default: a

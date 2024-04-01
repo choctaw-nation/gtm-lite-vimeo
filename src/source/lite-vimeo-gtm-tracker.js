@@ -48,7 +48,8 @@ import {
 
 	function loadApi(callback) {
 		if (isUndefined_(window.Vimeo)) {
-			loadScript('https://player.vimeo.com/api/player.js', callback);
+			// loadScript('https://player.vimeo.com/api/player.js', callback); // original function implementation
+			loadScript(callback); // 2.0
 		} else {
 			callback();
 		}

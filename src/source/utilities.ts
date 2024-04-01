@@ -24,7 +24,7 @@ export function extend_(): string {
  */
 export function isArray_(o: any) {
 	if (Array.isArray_) return Array.isArray_(o);
-	return Object.prototype.toString.call(o) === "[object Array]";
+	return Object.prototype.toString.call(o) === '[object Array]';
 }
 
 /**
@@ -96,7 +96,7 @@ export function reduce_(arr: Array<any>, fn: Function, init: any): any {
  * @returns boolean
  */
 export function isUndefined_(thing: any) {
-	return typeof thing === "undefined";
+	return typeof thing === 'undefined';
 }
 
 /**
@@ -117,22 +117,31 @@ export function selectAllTags_(tags: string | string[]): Array<any> {
  * @returns boolean
  */
 export function isVimeo(el: HTMLElement): boolean {
-	console.log("checking src of " + el);
-	return el.src.indexOf("player.vimeo.com/video/") > -1;
+	console.log('checking src of ' + el);
+	return el.src.indexOf('player.vimeo.com/video/') > -1;
 }
 
-export function loadScript(src: string, callback: Function) {
-	var f, s;
-	f = document.getElementsByTagName("script")[0];
-	s = document.createElement("script");
-	s.onload = callCallback;
-	s.src = src;
-	s.async = true;
-	f.parentNode.insertBefore(s, f);
-	function callCallback() {
-		if (callback) {
-			callback();
-			s.onload = null;
+/**
+ * Loads the Vimeo API script before the first script
+ * @param callback {Function} A callback function
+ */
+export function loadScript(callback: Function) {
+	const src = 'https://player.vimeo.com/api/player.js';
+	const vimeoPlayerScript = document.createElement('script');
+	vimeoPlayerScript.onload = () => {
+		callback();
+		vimeoPlayerScript.onload = null;
+	};
+	vimeoPlayerScript.src = src;
+	vimeoPlayerScript.async = true;
+
+	const scripts = document.getElementsByTagName('script');
+	if (scripts.length > 0) {
+		const script = scripts[0];
+		if (script && script.parentNode) {
+			script.parentNode.insertBefore(vimeoPlayerScript, script);
 		}
+	} else {
+		document.head.appendChild(vimeoPlayerScript);
 	}
 }

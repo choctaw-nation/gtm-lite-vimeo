@@ -1,8 +1,5 @@
-import { isVimeo, loadScript } from './source/utilities';
-import fakeGTM from './utilities/fakeGTM';
-
-fakeGTM();
-
+// import fakeGTM from './utilities/fakeGTM';
+// fakeGTM();
 type ConfigObject = {
 	events: {
 		play: boolean;
@@ -10,10 +7,10 @@ type ConfigObject = {
 		complete: boolean;
 	};
 	percentages: {
-		every: number;
+		every: number | number[];
 		each: number[];
 	};
-	_track: {
+	_track?: {
 		percentages: {};
 	};
 };
@@ -26,35 +23,36 @@ declare global {
 }
 
 export class LiteVimeoGTMTracker {
-	document: Document;
+	dataLayer: Window['dataLayer'];
+	config: ConfigObject = {
+		events: {
+			play: true,
+			pause: false,
+			complete: true,
+		},
+		percentages: {
+			every: 25,
+			each: [0, 90],
+		},
+	};
 
-	window: Window;
-
-	config: ConfigObject;
-
-	handle: CallableFunction;
-
-	constructor(document: Document, window: Window, config: ConfigObject) {
-		this.document = document;
-		this.window = window;
-		this.config = config;
-		this.cleanConfig();
-		this.handle = !config.syntax
-			? this.getHandler()
-			: this.getHandler(config.syntax);
-
+	constructor(config: ConfigObject) {
 		// The API won't work on LT IE9, so we bail if we detect those User Agents
 		if (navigator.userAgent.match(/MSIE [678]\./gi)) return;
-
 		const liteVimeoEls = document.querySelectorAll('lite-vimeo');
 		if (!liteVimeoEls || 0 === liteVimeoEls.length) return;
+
+		this.dataLayer = window.dataLayer;
+		this.config = { ...this.config, ...config };
+		this.cleanConfig();
+
 		liteVimeoEls.forEach((el) => {
 			el.addEventListener('click', () => {
 				window.dataLayer.push({
 					event: 'lite-vimeo-click',
 				});
 				this.loadVimeoAPI(() => {
-					this.listenTo(
+					this.addVimeoListeners(
 						el.shadowRoot.querySelector(
 							'iframe'
 						) as HTMLIFrameElement
@@ -68,32 +66,54 @@ export class LiteVimeoGTMTracker {
 	 * Sets up the config object
 	 */
 	private cleanConfig() {
-		[Object.keys(this.config.percentages)].forEach((setting) => {
-			let values = this.config.percentages[`${setting}`];
-			if (!Array.isArray(values)) values = [values];
-			if (values) {
-				this.config.percentages[`${setting}`] = values.map(Number);
+		this.setPercentageValuesToArrays();
+		this.calcPercentages();
+	}
+
+	/**
+	 * Extends the config object to include _track, which holds a dictionary of percentages and values to track
+	 */
+	private calcPercentages() {
+		let points = this.config.percentages.every as number[];
+		let percentagePoints: number[] = [];
+
+		points.forEach((val) => {
+			const n = 100 / val; // val = 25, n = 4
+			let i = 1;
+			while (i < n) {
+				const point = val * i;
+				i++;
+				if (point > 0.0 && point < 100.0) {
+					percentagePoints.push(point);
+				}
 			}
 		});
 
-		let percentagePoints = [...this.config.percentages.each];
-		if (this.config.percentages.every) {
-			[this.config.percentages.every].forEach(function (val) {
-				var n = 100 / val;
-				let every: number[] = [];
-				for (let i = 1; i < n; i++) every.push(val * i);
-				percentagePoints = percentagePoints.concat(
-					every.filter((val) => val > 0.0 && val < 100.0)
-				);
-			});
-		}
-		const percentages = percentagePoints.reduce(function (prev, curr) {
-			prev[curr + '%'] = curr / 100.0;
-			return prev;
-		}, {});
+		percentagePoints = [
+			...this.config.percentages.each,
+			...percentagePoints,
+		];
+
 		this.config._track = {
-			percentages: percentages,
+			percentages: percentagePoints.reduce((prev, curr) => {
+				prev[curr + '%'] = curr / 100.0;
+				return prev;
+			}, {}),
 		};
+	}
+
+	/**
+	 * Set every value in the percentages object to an array
+	 */
+	private setPercentageValuesToArrays() {
+		const settings = [...Object.keys(this.config.percentages)];
+		settings.forEach((setting) => {
+			let values = this.config.percentages[setting];
+			if (!Array.isArray(values)) values = [values];
+			if (values) {
+				this.config.percentages[setting] = values.map(Number);
+			}
+		});
 	}
 
 	/**
@@ -102,132 +122,102 @@ export class LiteVimeoGTMTracker {
 	 */
 	private loadVimeoAPI(callback: Function) {
 		if (!window.Vimeo) {
-			loadScript('https://player.vimeo.com/api/player.js', callback);
+			this.loadScript(callback);
 		} else {
 			callback();
 		}
 	}
 
 	/**
-	 * Wire up the Event listener
+	 * Wire up the Event listeners for the Vimeo player
 	 * @param {HTMLIFrameElement} el
-	 * @returns
 	 */
-	private async listenTo(el: HTMLIFrameElement) {
-		console.log('listening...');
-		if (el.__vimeoTracked) return;
-		el.__vimeoTracked = true;
+	private addVimeoListeners(el: HTMLIFrameElement) {
 		const video: Vimeo = new Vimeo.Player(el);
-		const {
-			_track: { percentages },
-		} = this.config;
-		const eventNameDict = {
+		const vimeoVideoEvents = {
 			play: 'play',
 			pause: 'pause',
 			complete: 'ended',
 		};
-		const cache = {};
-		const title = await video.getVideoTitle();
-		['play', 'pause', 'complete'].forEach((key) => {
-			if (this.config.events[`${key}`]) {
-				console.log(eventNameDict[`${key}`]);
-				video.on(eventNameDict[`${key}`], () => {
-					this.handle(key, title);
-					console.log(window.dataLayer);
-				});
-			}
+		// const cache = {};
+		video.getVideoTitle().then((title) => {
+			['play', 'pause', 'complete'].forEach((key) => {
+				if (this.config.events[`${key}`]) {
+					video.on(vimeoVideoEvents[`${key}`], () => {
+						this.updateDataLayer(key, title);
+					});
+				}
+			});
 		});
-
+		const percentages = this.config._track?.percentages;
 		if (percentages) {
-			video.on('timeupdate', function (evt) {
-				var percentage = evt.percent;
+			video.on('timeupdate', ({ percent }) => {
 				var key: string | number;
 				for (key in percentages) {
-					if (percentage >= percentages[key] && !cache[key]) {
-						cache[key] = true;
-						this.handle(key, title);
+					if (percent >= percentages[key] && !cache[key]) {
+						// cache[key] = true;
+						this.updateDataLayer(key, title);
 					}
 				}
 			});
 		}
 	}
 
-	private getHandler(syntax = {}) {
-		var gtmGlobal = syntax.name || 'dataLayer';
-		var uaGlobal = syntax.name || window.GoogleAnalyticsObject || 'ga';
-		var clGlobal = '_gaq';
-		var dataLayer:
-			| Window
-			| {
-					event: string;
-					video_provider: string;
-					video_action: any;
-					video_title: any;
-					video_percent: any;
-			  }[];
-		var handlers = {
-			gtm: function (state: string | string[], title: string) {
-				if (state.indexOf('%') === -1 && state.indexOf('play') === -1) {
-					dataLayer.push({
-						event: 'video',
-						video_provider: 'vimeo',
-						video_action: state,
-						video_title: title.toLowerCase(),
-						video_percent: undefined,
-					});
-				} else if (state === '0%') {
-					dataLayer.push({
-						event: 'video',
-						video_provider: 'vimeo',
-						video_action: 'start',
-						video_title: title.toLowerCase(),
-						video_percent: undefined,
-					});
-				} else if (state.indexOf('play') === -1) {
-					dataLayer.push({
-						event: 'video',
-						video_provider: 'vimeo',
-						video_action: 'progress',
-						video_percent: state,
-						video_title: title.toLowerCase(),
-					});
-				}
-			},
-			cl: function (state: any, title: any) {
-				window[clGlobal].push(['_trackEvent', 'Videos', state, title]);
-			},
-			ua: function (state: any, title: any) {
-				window[uaGlobal]('send', 'event', 'Videos', state, title);
-			},
-		};
-		switch (syntax.type) {
-			case 'gtm':
-				dataLayer = window[gtmGlobal] = window[gtmGlobal] || [];
-				break;
-			case 'ua':
-				window[uaGlobal] =
-					window[uaGlobal] ||
-					function () {
-						(window[uaGlobal].q = window[uaGlobal].q || []).push(
-							arguments
-						);
-					};
-				window[uaGlobal].l = +new Date();
-				break;
-			case 'cl':
-				window[clGlobal] = window[clGlobal] || [];
-				break;
-			default:
-				if (!window[gtmGlobal]) {
-					syntax.type = 'gtm';
-					dataLayer = window[gtmGlobal] = window[gtmGlobal] || [];
-				} else if (uaGlobal && !window[uaGlobal]) {
-					syntax.type = 'ua';
-				} else if (!window[clGlobal] && !window[clGlobal].push) {
-					syntax.type = 'cl';
-				}
-				break;
+	/**
+	 * Updates the GTM dataLayer with the video event
+	 * @param action
+	 * @param videoTitle
+	 */
+	private updateDataLayer(action: string, videoTitle: string) {
+		if (action.indexOf('%') === -1 && action.indexOf('play') === -1) {
+			this.dataLayer.push({
+				event: 'video',
+				video_provider: 'vimeo',
+				video_action: action,
+				video_title: videoTitle.toLowerCase(),
+				video_percent: undefined,
+			});
+		} else if (action === '0%') {
+			this.dataLayer.push({
+				event: 'video',
+				video_provider: 'vimeo',
+				video_action: 'start',
+				video_title: videoTitle.toLowerCase(),
+				video_percent: undefined,
+			});
+		} else if (action.indexOf('play') === -1) {
+			this.dataLayer.push({
+				event: 'video',
+				video_provider: 'vimeo',
+				video_action: 'progress',
+				video_percent: action,
+				video_title: videoTitle.toLowerCase(),
+			});
 		}
-		return handlers[syntax.type];
+	}
+
+	/**
+	 * Loads the Vimeo API script before the first script
+	 * @param callback {Function} A callback function
+	 */
+	private loadScript(callback: Function) {
+		const src = 'https://player.vimeo.com/api/player.js';
+		const vimeoPlayerScript = document.createElement('script');
+		vimeoPlayerScript.onload = () => {
+			callback();
+			vimeoPlayerScript.onload = null;
+		};
+		vimeoPlayerScript.src = src;
+		vimeoPlayerScript.async = true;
+
+		const scripts = document.getElementsByTagName('script');
+		if (scripts.length > 0) {
+			const script = scripts[0];
+			if (script && script.parentNode) {
+				script.parentNode.insertBefore(vimeoPlayerScript, script);
+			}
+		} else {
+			document.head.appendChild(vimeoPlayerScript);
+		}
 	}
 }
