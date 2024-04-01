@@ -139,7 +139,6 @@ export class LiteVimeoGTMTracker {
 			pause: 'pause',
 			complete: 'ended',
 		};
-		// const cache = {};
 		video.getVideoTitle().then((title) => {
 			['play', 'pause', 'complete'].forEach((key) => {
 				if (this.config.events[`${key}`]) {
@@ -148,19 +147,18 @@ export class LiteVimeoGTMTracker {
 					});
 				}
 			});
-		});
-		const percentages = this.config._track?.percentages;
-		if (percentages) {
-			video.on('timeupdate', ({ percent }) => {
-				var key: string | number;
-				for (key in percentages) {
-					if (percent >= percentages[key] && !cache[key]) {
-						// cache[key] = true;
-						this.updateDataLayer(key, title);
+			const percentages = this.config._track?.percentages;
+			if (percentages) {
+				video.on('timeupdate', ({ percent }) => {
+					var key: string | number;
+					for (key in percentages) {
+						if (percent >= percentages[key]) {
+							this.updateDataLayer(key, title);
+						}
 					}
-				}
-			});
-		}
+				});
+			}
+		});
 	}
 
 	/**
