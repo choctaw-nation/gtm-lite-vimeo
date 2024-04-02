@@ -163,7 +163,6 @@ export class LiteVimeoGTMTracker {
 						) {
 							eventCache[key] = true;
 							this.updateDataLayer(key, title);
-							console.log(this.dataLayer);
 						}
 					}
 				});
