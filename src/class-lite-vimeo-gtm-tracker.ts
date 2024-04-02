@@ -122,7 +122,7 @@ export class LiteVimeoGTMTracker {
 	 */
 	private loadVimeoAPI(callback: Function) {
 		if (!window.Vimeo) {
-			this.loadScript(callback);
+			this.loadVimeoPlayerScript(callback);
 		} else {
 			callback();
 		}
@@ -208,7 +208,7 @@ export class LiteVimeoGTMTracker {
 	 * Loads the Vimeo API script before the first script
 	 * @param callback {Function} A callback function
 	 */
-	private loadScript(callback: Function) {
+	private loadVimeoPlayerScript(callback: Function) {
 		const src = 'https://player.vimeo.com/api/player.js';
 		const vimeoPlayerScript = document.createElement('script');
 		vimeoPlayerScript.onload = () => {
