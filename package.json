@@ -8,7 +8,7 @@
 			"context": "browser",
 			"outputFormat": "global",
 			"engines": {
-				"browsers": "> 0.25%, not dead"
+				"browsers": "ie 11"
 			},
 			"optimize": false,
 			"sourceMap": true,

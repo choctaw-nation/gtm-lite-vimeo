@@ -1,5 +1,3 @@
-// import fakeGTM from './utilities/fakeGTM';
-// fakeGTM();
 type ConfigObject = {
 	events: {
 		play: boolean;
@@ -11,7 +9,9 @@ type ConfigObject = {
 		each: number[];
 	};
 	_track?: {
-		percentages: {};
+		percentages: {
+			[key: string]: number;
+		};
 	};
 };
 
@@ -53,7 +53,7 @@ export class LiteVimeoGTMTracker {
 				});
 				this.loadVimeoAPI(() => {
 					this.addVimeoListeners(
-						el.shadowRoot.querySelector(
+						el.shadowRoot?.querySelector(
 							'iframe'
 						) as HTMLIFrameElement
 					);
@@ -139,6 +139,11 @@ export class LiteVimeoGTMTracker {
 			pause: 'pause',
 			complete: 'ended',
 		};
+		/**
+		 * Cache for the percentage events
+		 * @type {{[key: string]: boolean}}
+		 */
+		const eventCache = {};
 		video.getVideoTitle().then((title) => {
 			['play', 'pause', 'complete'].forEach((key) => {
 				if (this.config.events[`${key}`]) {
@@ -150,10 +155,15 @@ export class LiteVimeoGTMTracker {
 			const percentages = this.config._track?.percentages;
 			if (percentages) {
 				video.on('timeupdate', ({ percent }) => {
-					var key: string | number;
-					for (key in percentages) {
-						if (percent >= percentages[key]) {
+					const simplePercent = Number(percent.toPrecision(2));
+					for (const key in percentages) {
+						if (
+							simplePercent === percentages[key] &&
+							!eventCache[key]
+						) {
+							eventCache[key] = true;
 							this.updateDataLayer(key, title);
+							console.log(this.dataLayer);
 						}
 					}
 				});
