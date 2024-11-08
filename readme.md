@@ -24,9 +24,8 @@ I removed a lot of the, in my opinion, redundant Array methods (e.g. `foreach_` 
 
 ## v1.0.1
 
-- Swap packages
-- Update code
-- Add Github Deploy + Release action
+-   Swap @slightlyoff package for Choctaw Nation package
+-   Update code to handle events properly and catch errors
 
 ## v1.0.0
 
