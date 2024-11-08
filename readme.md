@@ -22,6 +22,11 @@ I removed a lot of the, in my opinion, redundant Array methods (e.g. `foreach_` 
 
 # Changelog
 
+## v1.0.1
+
+-   Swap @slightlyoff package for Choctaw Nation package
+-   Update code to handle events properly and catch errors
+
 ## v1.0.0
 
 -   init!

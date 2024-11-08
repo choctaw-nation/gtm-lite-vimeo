@@ -1,6 +1,6 @@
 {
 	"name": "gtm-lite-vimeo",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"prettier": "@wordpress/prettier-config",
 	"description": "Google Tag Manager scripts for tracking Vimeo videos inside of the lite-vimeo web component",
 	"targets": {
@@ -34,9 +34,9 @@
 	"license": "GPL-3.0-or-later",
 	"devDependencies": {
 		"@analytics/google-tag-manager": "^0.5.5",
-		"@slightlyoff/lite-vimeo": "^0.1.2",
+		"@choctawnationofoklahoma/lite-vimeo": "^1.1.1",
 		"@types/vimeo__player": "^2.18.3",
-		"@wordpress/prettier-config": "^3.11.0",
+		"@wordpress/prettier-config": "^4.11.0",
 		"parcel": "^2.12.0"
 	}
 }

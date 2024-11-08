@@ -1,5 +1,5 @@
 type ConfigObject = {
-	events: {
+	eventsToTrack: {
 		play: boolean;
 		pause: boolean;
 		complete: boolean;
@@ -25,7 +25,7 @@ declare global {
 export class LiteVimeoGTMTracker {
 	dataLayer: Window['dataLayer'];
 	config: ConfigObject = {
-		events: {
+		eventsToTrack: {
 			play: true,
 			pause: false,
 			complete: true,
@@ -47,16 +47,13 @@ export class LiteVimeoGTMTracker {
 		this.cleanConfig();
 
 		liteVimeoEls.forEach((el) => {
-			el.addEventListener('click', () => {
+			el.addEventListener('click', (ev) => {
 				window.dataLayer.push({
 					event: 'lite-vimeo-click',
 				});
+
 				this.loadVimeoAPI(() => {
-					this.addVimeoListeners(
-						el.shadowRoot?.querySelector(
-							'iframe'
-						) as HTMLIFrameElement
-					);
+					this.addVimeoListeners(el, ev.view);
 				});
 			});
 		});
@@ -121,34 +118,39 @@ export class LiteVimeoGTMTracker {
 	 * @param {Function} callback
 	 */
 	private loadVimeoAPI(callback: Function) {
-		if (!window.Vimeo) {
-			this.loadVimeoPlayerScript(callback);
-		} else {
-			callback();
+		try {
+			if (!window.Vimeo) {
+				this.loadVimeoPlayerScript(callback);
+			} else {
+				callback();
+			}
+		} catch (err) {
+			console.error(err);
 		}
 	}
 
 	/**
 	 * Wire up the Event listeners for the Vimeo player
-	 * @param {HTMLIFrameElement} el
+	 * @param {Element} el the lite-vimeo component
+	 * @param {MouseEvent} ev the lite-vimeo component
 	 */
-	private addVimeoListeners(el: HTMLIFrameElement) {
-		const video: Vimeo = new Vimeo.Player(el);
+	private addVimeoListeners(el: Element, ev: MouseEvent) {
+		const iframe = el.shadowRoot?.querySelector('iframe');
+		if (!iframe)
+			throw new Error('No iframe found in the lite-vimeo component');
+		const video: Vimeo = new ev.Vimeo.Player(iframe);
 		const vimeoVideoEvents = {
 			play: 'play',
 			pause: 'pause',
 			complete: 'ended',
 		};
-		/**
-		 * Cache for the percentage events
-		 * @type {{[key: string]: boolean}}
-		 */
-		const eventCache = {};
+
+		const eventCache: { [key: string]: boolean } = {};
 		video.getVideoTitle().then((title) => {
-			['play', 'pause', 'complete'].forEach((key) => {
-				if (this.config.events[`${key}`]) {
-					video.on(vimeoVideoEvents[`${key}`], () => {
-						this.updateDataLayer(key, title);
+			['play', 'pause', 'complete'].forEach((eventName) => {
+				if (this.config.eventsToTrack[`${eventName}`]) {
+					video.on(vimeoVideoEvents[`${eventName}`], (ev) => {
+						this.updateDataLayer(eventName, title);
 					});
 				}
 			});
@@ -184,7 +186,7 @@ export class LiteVimeoGTMTracker {
 				video_title: videoTitle.toLowerCase(),
 				video_percent: undefined,
 			});
-		} else if (action === '0%') {
+		} else if (action === '0%' || 'play' === action) {
 			this.dataLayer.push({
 				event: 'video',
 				video_provider: 'vimeo',
@@ -210,12 +212,15 @@ export class LiteVimeoGTMTracker {
 	private loadVimeoPlayerScript(callback: Function) {
 		const src = 'https://player.vimeo.com/api/player.js';
 		const vimeoPlayerScript = document.createElement('script');
-		vimeoPlayerScript.onload = () => {
-			callback();
-			vimeoPlayerScript.onload = null;
-		};
 		vimeoPlayerScript.src = src;
 		vimeoPlayerScript.async = true;
+		vimeoPlayerScript.onload = () => {
+			try {
+				callback();
+			} catch (err) {
+				console.error(err);
+			}
+		};
 
 		const scripts = document.getElementsByTagName('script');
 		if (scripts.length > 0) {
