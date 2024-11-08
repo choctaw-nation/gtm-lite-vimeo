@@ -22,6 +22,12 @@ I removed a lot of the, in my opinion, redundant Array methods (e.g. `foreach_` 
 
 # Changelog
 
+## v1.0.1
+
+- Swap packages
+- Update code
+- Add Github Deploy + Release action
+
 ## v1.0.0
 
 -   init!

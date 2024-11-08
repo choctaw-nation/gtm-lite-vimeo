@@ -139,11 +139,8 @@ export class LiteVimeoGTMTracker {
 			pause: 'pause',
 			complete: 'ended',
 		};
-		/**
-		 * Cache for the percentage events
-		 * @type {{[key: string]: boolean}}
-		 */
-		const eventCache = {};
+
+		const eventCache: { [key: string]: boolean } = {};
 		video.getVideoTitle().then((title) => {
 			['play', 'pause', 'complete'].forEach((key) => {
 				if (this.config.events[`${key}`]) {
